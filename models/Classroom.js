@@ -39,15 +39,7 @@ const Classroom = sequelize.define('Classroom', {
   tableName: 'classrooms',
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: 'updated_at',
-  hooks: {
-    beforeCreate: (classroom) => {
-      if (!classroom.classroom_code) {
-        // Generate a random 6-character code
-        classroom.classroom_code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      }
-    }
-  }
+  updatedAt: 'updated_at'
 });
 
 module.exports = Classroom;
