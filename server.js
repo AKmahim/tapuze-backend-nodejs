@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const { gradeHomework } = require('./geminiService');
 const { convertPdfToImage } = require('./pdfConverter');
+const { Lecturer } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -99,6 +100,62 @@ app.post('/api/evaluate', async (req, res) => {
     } catch (error) {
         console.error('AI Evaluation Error:', error);
         res.status(500).json({ message: error.message || 'An error occurred during AI evaluation.' });
+    }
+});
+
+// POST lecturer signup
+app.post('/api/lecturers/signup', async (req, res) => {
+    const { name, email, password } = req.body;
+    
+    // Validate required fields
+    if (!name || !email || !password) {
+        return res.status(400).json({ 
+            message: 'Name, email, and password are required.' 
+        });
+    }
+
+    try {
+        // Check if lecturer with email already exists
+        const existingLecturer = await Lecturer.findOne({ where: { email } });
+        if (existingLecturer) {
+            return res.status(409).json({ 
+                message: 'A lecturer with this email already exists.' 
+            });
+        }
+
+        // Create new lecturer
+        const newLecturer = await Lecturer.create({
+            name,
+            email,
+            password
+        });
+
+        res.status(201).json({
+            message: 'Lecturer registered successfully.',
+            lecturer: newLecturer
+        });
+    } catch (error) {
+        console.error('Lecturer Signup Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map(err => err.message);
+            return res.status(400).json({ 
+                message: 'Validation error.',
+                errors: validationErrors 
+            });
+        }
+        
+        // Handle unique constraint errors
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(409).json({ 
+                message: 'A lecturer with this email already exists.' 
+            });
+        }
+        
+        res.status(500).json({ 
+            message: 'An error occurred during registration.' 
+        });
     }
 });
 
