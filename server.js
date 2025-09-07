@@ -5,6 +5,7 @@ const path = require('path');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
+const jwt = require('jsonwebtoken');
 const { gradeHomework } = require('./geminiService');
 const { convertPdfToImage } = require('./pdfConverter');
 const { Lecturer } = require('./models');
@@ -43,6 +44,32 @@ const writeDB = (data) => {
     } catch (error) {
         console.error('Error writing to database:', error);
     }
+};
+
+// JWT Authentication Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+        return res.status(401).json({ message: 'Access token required.' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Invalid or expired token.' });
+        }
+        req.user = user;
+        next();
+    });
+};
+
+// Middleware to verify lecturer role
+const requireLecturer = (req, res, next) => {
+    if (req.user.type !== 'lecturer') {
+        return res.status(403).json({ message: 'Lecturer access required.' });
+    }
+    next();
 };
 
 // --- API Routes ---
@@ -159,14 +186,101 @@ app.post('/api/lecturers/signup', async (req, res) => {
     }
 });
 
+// POST lecturer signin
+app.post('/api/lecturers/signin', async (req, res) => {
+    const { email, password } = req.body;
+    
+    // Validate required fields
+    if (!email || !password) {
+        return res.status(400).json({ 
+            message: 'Email and password are required.' 
+        });
+    }
+
+    try {
+        // Find lecturer by email
+        const lecturer = await Lecturer.findOne({ where: { email } });
+        if (!lecturer) {
+            return res.status(401).json({ 
+                message: 'Invalid email or password.' 
+            });
+        }
+
+        // Validate password
+        const isValidPassword = await lecturer.validatePassword(password);
+        if (!isValidPassword) {
+            return res.status(401).json({ 
+                message: 'Invalid email or password.' 
+            });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { 
+                id: lecturer.id, 
+                email: lecturer.email,
+                name: lecturer.name,
+                type: 'lecturer'
+            },
+            process.env.JWT_SECRET || 'your-secret-key', // Use environment variable
+            { expiresIn: '24h' }
+        );
+
+        res.status(200).json({
+            message: 'Sign in successful.',
+            token,
+            lecturer: {
+                id: lecturer.id,
+                name: lecturer.name,
+                email: lecturer.email,
+                department: lecturer.department,
+                bio: lecturer.bio
+            }
+        });
+    } catch (error) {
+        console.error('Lecturer Signin Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred during sign in.' 
+        });
+    }
+});
+
+// GET lecturer profile (protected route)
+app.get('/api/lecturers/profile', authenticateToken, requireLecturer, async (req, res) => {
+    try {
+        const lecturer = await Lecturer.findByPk(req.user.id);
+        if (!lecturer) {
+            return res.status(404).json({ message: 'Lecturer not found.' });
+        }
+        
+        res.status(200).json({
+            lecturer: {
+                id: lecturer.id,
+                name: lecturer.name,
+                email: lecturer.email,
+                phone_number: lecturer.phone_number,
+                department: lecturer.department,
+                bio: lecturer.bio,
+                created_at: lecturer.created_at,
+                updated_at: lecturer.updated_at
+            }
+        });
+    } catch (error) {
+        console.error('Get Profile Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while fetching profile.' 
+        });
+    }
+});
+
 // GET all classrooms
 app.get('/api/classrooms', (req, res) => {
     const db = readDB();
     res.json(db.classrooms);
 });
 
-// POST create a new classroom
-app.post('/api/classrooms', (req, res) => {
+// POST create a new classroom (protected route)
+app.post('/api/classrooms', authenticateToken, requireLecturer, (req, res) => {
     const { name } = req.body;
     if (!name) {
         return res.status(400).json({ message: 'Classroom name is required.' });
@@ -175,7 +289,7 @@ app.post('/api/classrooms', (req, res) => {
     const newClassroom = {
         id: uuidv4(),
         name,
-        teacherId: 'teacher-01', // mock teacher id
+        teacherId: req.user.id, // Use authenticated lecturer's ID
         secretCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
         assignments: [],
         studentIds: []
