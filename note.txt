@@ -1,0 +1,24 @@
+### database model details
+database name is tapuze_nodejs
+
+
+================= lecture section ===================
+## lecture model
+=> id,name,email,phone_number,department,bio(will be a text),password,created_at,updated_at
+
+## classroom model 
+=> id,class_name,class_details,classroom_code,created_by(leacture id),created_at,updated_at
+
+# assignment model
+=> id,assignment_title,assignment_details,due_date,created_by(leacture id),classroom_id(classroom id),created_at,updated_at
+
+## assignment submission 
+=> id,assignment_file,mark,student_id,assignment_id,status,created_at,updated_at
+
+
+
+
+================== student section ==================
+## student model
+=> id,name,email,password,created_at,updated_at
+
