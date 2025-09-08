@@ -8,7 +8,7 @@ const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const { gradeHomework } = require('./geminiService');
 const { convertPdfToImage } = require('./pdfConverter');
-const { Lecturer, Classroom } = require('./models');
+const { Lecturer, Classroom, Assignment } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -414,6 +414,134 @@ app.post('/api/classrooms', authenticateToken, requireLecturer, async (req, res)
     }
 });
 
+// GET all assignments for a specific classroom
+app.get('/api/classrooms/:classroomId/assignments', authenticateToken, requireLecturer, async (req, res) => {
+    const { classroomId } = req.params;
+
+    try {
+        // Verify that the classroom exists and belongs to the authenticated lecturer
+        const classroom = await Classroom.findOne({
+            where: {
+                id: classroomId,
+                created_by: req.user.id
+            }
+        });
+
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found or you do not have permission to view assignments in this classroom.' 
+            });
+        }
+
+        // Get all assignments for the classroom
+        const assignments = await Assignment.findAll({
+            where: {
+                classroom_id: classroomId
+            },
+            include: [
+                {
+                    model: Lecturer,
+                    as: 'lecturer',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Classroom,
+                    as: 'classroom',
+                    attributes: ['id', 'class_name', 'classroom_code']
+                }
+            ],
+            order: [['created_at', 'DESC']]
+        });
+
+        res.status(200).json({
+            assignments: assignments.map(assignment => ({
+                id: assignment.id,
+                assignment_title: assignment.assignment_title,
+                assignment_details: assignment.assignment_details,
+                due_date: assignment.due_date,
+                created_by: assignment.created_by,
+                classroom_id: assignment.classroom_id,
+                created_at: assignment.created_at,
+                updated_at: assignment.updated_at,
+                lecturer: assignment.lecturer,
+                classroom: assignment.classroom
+            }))
+        });
+    } catch (error) {
+        console.error('Get Assignments Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while fetching assignments.' 
+        });
+    }
+});
+
+// GET specific assignment by ID
+app.get('/api/classrooms/:classroomId/assignments/:assignmentId', authenticateToken, requireLecturer, async (req, res) => {
+    const { classroomId, assignmentId } = req.params;
+
+    try {
+        // Verify that the classroom exists and belongs to the authenticated lecturer
+        const classroom = await Classroom.findOne({
+            where: {
+                id: classroomId,
+                created_by: req.user.id
+            }
+        });
+
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found or you do not have permission to view this classroom.' 
+            });
+        }
+
+        // Get the specific assignment
+        const assignment = await Assignment.findOne({
+            where: {
+                id: assignmentId,
+                classroom_id: classroomId
+            },
+            include: [
+                {
+                    model: Lecturer,
+                    as: 'lecturer',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Classroom,
+                    as: 'classroom',
+                    attributes: ['id', 'class_name', 'classroom_code']
+                }
+            ]
+        });
+
+        if (!assignment) {
+            return res.status(404).json({ 
+                message: 'Assignment not found in this classroom.' 
+            });
+        }
+
+        res.status(200).json({
+            assignment: {
+                id: assignment.id,
+                assignment_title: assignment.assignment_title,
+                assignment_details: assignment.assignment_details,
+                due_date: assignment.due_date,
+                created_by: assignment.created_by,
+                classroom_id: assignment.classroom_id,
+                created_at: assignment.created_at,
+                updated_at: assignment.updated_at,
+                lecturer: assignment.lecturer,
+                classroom: assignment.classroom
+            }
+        });
+    } catch (error) {
+        console.error('Get Assignment Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while fetching the assignment.' 
+        });
+    }
+});
+
 // POST join a classroom
 app.post('/api/classrooms/join', (req, res) => {
     const { secretCode, studentId } = req.body;
@@ -436,26 +564,91 @@ app.post('/api/classrooms/join', (req, res) => {
 });
 
 // POST create an assignment
-app.post('/api/classrooms/:classroomId/assignments', (req, res) => {
+app.post('/api/classrooms/:classroomId/assignments', authenticateToken, requireLecturer, async (req, res) => {
     const { classroomId } = req.params;
-    const { title } = req.body;
-    if (!title) {
-        return res.status(400).json({ message: 'Assignment title is required.' });
+    const { assignment_title, assignment_details, due_date } = req.body;
+    
+    // Validate required fields
+    if (!assignment_title) {
+        return res.status(400).json({ 
+            message: 'Assignment title is required.' 
+        });
     }
-    const db = readDB();
-    const classroom = db.classrooms.find(c => c.id === classroomId);
-    if (!classroom) {
-        return res.status(404).json({ message: 'Classroom not found.' });
+
+    try {
+        // Verify that the classroom exists and belongs to the authenticated lecturer
+        const classroom = await Classroom.findOne({
+            where: {
+                id: classroomId,
+                created_by: req.user.id
+            }
+        });
+
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found or you do not have permission to create assignments in this classroom.' 
+            });
+        }
+
+        // Create new assignment
+        const newAssignment = await Assignment.create({
+            assignment_title,
+            assignment_details: assignment_details || null,
+            due_date: due_date ? new Date(due_date) : null,
+            created_by: req.user.id,
+            classroom_id: parseInt(classroomId)
+        });
+
+        // Fetch the created assignment with related data
+        const assignmentWithDetails = await Assignment.findByPk(newAssignment.id, {
+            include: [
+                {
+                    model: Lecturer,
+                    as: 'lecturer',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Classroom,
+                    as: 'classroom',
+                    attributes: ['id', 'class_name', 'classroom_code']
+                }
+            ]
+        });
+
+        res.status(201).json({
+            message: 'Assignment created successfully.',
+            assignment: {
+                id: assignmentWithDetails.id,
+                assignment_title: assignmentWithDetails.assignment_title,
+                assignment_details: assignmentWithDetails.assignment_details,
+                due_date: assignmentWithDetails.due_date,
+                created_by: assignmentWithDetails.created_by,
+                classroom_id: assignmentWithDetails.classroom_id,
+                created_at: assignmentWithDetails.created_at,
+                updated_at: assignmentWithDetails.updated_at,
+                lecturer: assignmentWithDetails.lecturer,
+                classroom: assignmentWithDetails.classroom
+            }
+        });
+    } catch (error) {
+        console.error('Assignment Creation Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map(err => ({
+                field: err.path,
+                message: err.message
+            }));
+            return res.status(400).json({ 
+                message: 'Validation failed.',
+                errors: validationErrors
+            });
+        }
+        
+        res.status(500).json({ 
+            message: 'An error occurred while creating the assignment.' 
+        });
     }
-    const newAssignment = {
-        id: uuidv4(),
-        title,
-        createdAt: new Date().toISOString(),
-        submissions: [],
-    };
-    classroom.assignments.push(newAssignment);
-    writeDB(db);
-    res.status(201).json(newAssignment);
 });
 
 // POST submit an assignment
