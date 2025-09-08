@@ -22,3 +22,9 @@ database name is tapuze_nodejs
 ## student model
 => id,name,email,password,created_at,updated_at
 
+
+
+server database details:
+database:zavabdco_tapuze
+username:zavabdco_tapuze
+password:rd7Svvzu4XqZ

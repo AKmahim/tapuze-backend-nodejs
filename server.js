@@ -8,7 +8,7 @@ const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const { gradeHomework } = require('./geminiService');
 const { convertPdfToImage } = require('./pdfConverter');
-const { Lecturer, Classroom, Assignment } = require('./models');
+const { Lecturer, Classroom, Assignment, Student } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -68,6 +68,14 @@ const authenticateToken = (req, res, next) => {
 const requireLecturer = (req, res, next) => {
     if (req.user.type !== 'lecturer') {
         return res.status(403).json({ message: 'Lecturer access required.' });
+    }
+    next();
+};
+
+// Middleware to verify student role
+const requireStudent = (req, res, next) => {
+    if (req.user.type !== 'student') {
+        return res.status(403).json({ message: 'Student access required.' });
     }
     next();
 };
@@ -241,6 +249,152 @@ app.post('/api/lecturers/signin', async (req, res) => {
         console.error('Lecturer Signin Error:', error);
         res.status(500).json({ 
             message: 'An error occurred during sign in.' 
+        });
+    }
+});
+
+// POST student signup
+app.post('/api/students/signup', async (req, res) => {
+    const { name, email, password } = req.body;
+    
+    // Validate required fields
+    if (!name || !email || !password) {
+        return res.status(400).json({ 
+            message: 'Name, email, and password are required.' 
+        });
+    }
+
+    try {
+        // Check if student with email already exists
+        const existingStudent = await Student.findOne({ where: { email } });
+        if (existingStudent) {
+            return res.status(409).json({ 
+                message: 'A student with this email already exists.' 
+            });
+        }
+
+        // Create new student
+        const newStudent = await Student.create({
+            name,
+            email,
+            password
+        });
+
+        res.status(201).json({
+            message: 'Student registered successfully.',
+            student: {
+                id: newStudent.id,
+                name: newStudent.name,
+                email: newStudent.email,
+                created_at: newStudent.created_at,
+                updated_at: newStudent.updated_at
+            }
+        });
+    } catch (error) {
+        console.error('Student Signup Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map(err => err.message);
+            return res.status(400).json({ 
+                message: 'Validation error.',
+                errors: validationErrors 
+            });
+        }
+        
+        // Handle unique constraint errors
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(409).json({ 
+                message: 'A student with this email already exists.' 
+            });
+        }
+        
+        res.status(500).json({ 
+            message: 'An error occurred during registration.' 
+        });
+    }
+});
+
+// POST student signin
+app.post('/api/students/signin', async (req, res) => {
+    const { email, password } = req.body;
+    
+    // Validate required fields
+    if (!email || !password) {
+        return res.status(400).json({ 
+            message: 'Email and password are required.' 
+        });
+    }
+
+    try {
+        // Find student by email
+        const student = await Student.findOne({ where: { email } });
+        if (!student) {
+            return res.status(401).json({ 
+                message: 'Invalid email or password.' 
+            });
+        }
+
+        // Validate password
+        const isValidPassword = await student.validatePassword(password);
+        if (!isValidPassword) {
+            return res.status(401).json({ 
+                message: 'Invalid email or password.' 
+            });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { 
+                id: student.id, 
+                email: student.email,
+                name: student.name,
+                type: 'student'
+            },
+            process.env.JWT_SECRET || 'your-secret-key',
+            { expiresIn: '24h' }
+        );
+
+        res.status(200).json({
+            message: 'Sign in successful.',
+            token,
+            student: {
+                id: student.id,
+                name: student.name,
+                email: student.email,
+                created_at: student.created_at,
+                updated_at: student.updated_at
+            }
+        });
+    } catch (error) {
+        console.error('Student Signin Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred during sign in.' 
+        });
+    }
+});
+
+// GET student profile (protected route)
+app.get('/api/students/profile', authenticateToken, requireStudent, async (req, res) => {
+    try {
+        const student = await Student.findByPk(req.user.id);
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found.' });
+        }
+        
+        res.status(200).json({
+            student: {
+                id: student.id,
+                name: student.name,
+                email: student.email,
+                created_at: student.created_at,
+                updated_at: student.updated_at
+            }
+        });
+    } catch (error) {
+        console.error('Get Student Profile Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while fetching profile.' 
         });
     }
 });
