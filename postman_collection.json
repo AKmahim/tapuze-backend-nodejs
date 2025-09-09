@@ -1,0 +1,596 @@
+{
+  "info": {
+    "name": "Tapuze Backend API",
+    "description": "Complete API documentation for Tapuze homework grading system",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lecturer_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "student_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "classroom_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "classroom_code",
+      "value": "MATH101",
+      "type": "string"
+    },
+    {
+      "key": "assignment_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Lecturer Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. John Smith\",\n  \"email\": \"john.smith@university.edu\",\n  \"password\": \"securepassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/lecturers/signup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "lecturers", "signup"]
+            },
+            "description": "Register a new lecturer account"
+          },
+          "response": []
+        },
+        {
+          "name": "Lecturer Signin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.smith@university.edu\",\n  \"password\": \"securepassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/lecturers/signin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "lecturers", "signin"]
+            },
+            "description": "Sign in as a lecturer and receive JWT token"
+          },
+          "response": []
+        },
+        {
+          "name": "Student Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@student.university.edu\",\n  \"password\": \"studentpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/signup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "signup"]
+            },
+            "description": "Register a new student account"
+          },
+          "response": []
+        },
+        {
+          "name": "Student Signin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane.doe@student.university.edu\",\n  \"password\": \"studentpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/signin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "signin"]
+            },
+            "description": "Sign in as a student and receive JWT token"
+          },
+          "response": []
+        }
+      ],
+      "description": "Authentication endpoints for lecturers and students"
+    },
+    {
+      "name": "Profile Management",
+      "item": [
+        {
+          "name": "Get Lecturer Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/lecturers/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "lecturers", "profile"]
+            },
+            "description": "Get authenticated lecturer's profile information"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Student Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/students/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "profile"]
+            },
+            "description": "Get authenticated student's profile information"
+          },
+          "response": []
+        }
+      ],
+      "description": "Profile management endpoints"
+    },
+    {
+      "name": "Classroom Management",
+      "item": [
+        {
+          "name": "Create Classroom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"class_name\": \"Mathematics 101\",\n  \"class_details\": \"Introduction to Calculus and Linear Algebra\",\n  \"classroom_code\": \"MATH101\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/classrooms",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms"]
+            },
+            "description": "Create a new classroom (lecturer only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Classrooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/classrooms",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms"]
+            },
+            "description": "Get all classrooms for authenticated lecturer"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Classroom by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/{{classroom_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "{{classroom_id}}"]
+            },
+            "description": "Get specific classroom by ID (lecturer only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Classroom by Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/code/{{classroom_code}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "code", "{{classroom_code}}"],
+              "variable": [
+                {
+                  "key": "classroom_code",
+                  "value": "MATH101",
+                  "description": "The classroom code to search for"
+                }
+              ]
+            },
+            "description": "Get classroom by classroom code. Lecturers can only access their own classrooms, students can access any classroom for joining purposes."
+          },
+          "response": []
+        },
+        {
+          "name": "Join Classroom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"secretCode\": \"MATH101\",\n  \"studentId\": \"student123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/join",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "join"]
+            },
+            "description": "Join a classroom using classroom code (legacy endpoint)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Classroom management endpoints"
+    },
+    {
+      "name": "Assignment Management",
+      "item": [
+        {
+          "name": "Create Assignment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignment_title\": \"Homework 1: Derivatives\",\n  \"assignment_details\": \"Complete problems 1-15 from chapter 3. Show all work and explain your reasoning.\",\n  \"due_date\": \"2025-09-20T23:59:59.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "{{classroom_id}}", "assignments"]
+            },
+            "description": "Create a new assignment in a classroom (lecturer only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "{{classroom_id}}", "assignments"]
+            },
+            "description": "Get all assignments for a specific classroom (lecturer only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Assignment by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments/{{assignment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "{{classroom_id}}", "assignments", "{{assignment_id}}"]
+            },
+            "description": "Get specific assignment by ID (lecturer only)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Assignment management endpoints"
+    },
+    {
+      "name": "Assignment Submissions",
+      "item": [
+        {
+          "name": "Submit Assignment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"student123\",\n  \"fileData\": \"base64_encoded_file_data_here\",\n  \"fileName\": \"homework1.pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments/{{assignment_id}}/submissions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "{{classroom_id}}", "assignments", "{{assignment_id}}", "submissions"]
+            },
+            "description": "Submit an assignment (legacy endpoint using JSON storage)"
+          },
+          "response": []
+        },
+        {
+          "name": "Grade Submission",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"evaluation\": {\n    \"score\": 85,\n    \"feedback\": \"Good work! Make sure to show more detailed steps in problem 5.\",\n    \"rubric\": {\n      \"accuracy\": 8,\n      \"presentation\": 9,\n      \"completeness\": 8\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments/{{assignment_id}}/submissions/{{submission_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "{{classroom_id}}", "assignments", "{{assignment_id}}", "submissions", "{{submission_id}}"],
+              "variable": [
+                {
+                  "key": "submission_id",
+                  "value": "submission_uuid_here"
+                }
+              ]
+            },
+            "description": "Grade a submission (legacy endpoint using JSON storage)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Assignment submission endpoints (legacy)"
+    },
+    {
+      "name": "AI Evaluation & Testing",
+      "item": [
+        {
+          "name": "Test PDF Conversion",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "homeworkPdf",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/test-pdf-conversion",
+              "host": ["{{base_url}}"],
+              "path": ["api", "test-pdf-conversion"]
+            },
+            "description": "Test PDF to image conversion functionality. Upload a PDF file with key 'homeworkPdf'."
+          },
+          "response": []
+        },
+        {
+          "name": "Test AI Evaluation (PDF Upload)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "homeworkPdf",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/test-evaluation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "test-evaluation"]
+            },
+            "description": "Test complete AI evaluation workflow from PDF upload. Upload a PDF file with key 'homeworkPdf'."
+          },
+          "response": []
+        },
+        {
+          "name": "AI Evaluation (Base64)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileData\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/evaluate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "evaluate"]
+            },
+            "description": "Evaluate homework using base64 encoded image data (used by frontend)"
+          },
+          "response": []
+        }
+      ],
+      "description": "AI evaluation and testing endpoints"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set auth token from signin response",
+          "if (pm.response && pm.response.json() && pm.response.json().token) {",
+          "    pm.collectionVariables.set('auth_token', pm.response.json().token);",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-extract token from authentication responses",
+          "if (pm.response.to.have.status(200) || pm.response.to.have.status(201)) {",
+          "    const responseJson = pm.response.json();",
+          "    ",
+          "    // Set auth token from signin responses",
+          "    if (responseJson.token) {",
+          "        pm.collectionVariables.set('auth_token', responseJson.token);",
+          "        console.log('Auth token set: ' + responseJson.token.substring(0, 20) + '...');",
+          "    }",
+          "    ",
+          "    // Set lecturer ID",
+          "    if (responseJson.lecturer && responseJson.lecturer.id) {",
+          "        pm.collectionVariables.set('lecturer_id', responseJson.lecturer.id);",
+          "        console.log('Lecturer ID set: ' + responseJson.lecturer.id);",
+          "    }",
+          "    ",
+          "    // Set student ID",
+          "    if (responseJson.student && responseJson.student.id) {",
+          "        pm.collectionVariables.set('student_id', responseJson.student.id);",
+          "        console.log('Student ID set: ' + responseJson.student.id);",
+          "    }",
+          "    ",
+          "    // Set classroom ID",
+          "    if (responseJson.classroom && responseJson.classroom.id) {",
+          "        pm.collectionVariables.set('classroom_id', responseJson.classroom.id);",
+          "        console.log('Classroom ID set: ' + responseJson.classroom.id);",
+          "    }",
+          "    ",
+          "    // Set classroom code",
+          "    if (responseJson.classroom && responseJson.classroom.classroom_code) {",
+          "        pm.collectionVariables.set('classroom_code', responseJson.classroom.classroom_code);",
+          "        console.log('Classroom code set: ' + responseJson.classroom.classroom_code);",
+          "    }",
+          "    ",
+          "    // Set assignment ID",
+          "    if (responseJson.assignment && responseJson.assignment.id) {",
+          "        pm.collectionVariables.set('assignment_id', responseJson.assignment.id);",
+          "        console.log('Assignment ID set: ' + responseJson.assignment.id);",
+          "    }",
+          "}",
+          "",
+          "// Basic response validation",
+          "pm.test('Response status is success', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+          "});",
+          "",
+          "pm.test('Response has valid JSON', function () {",
+          "    pm.response.to.have.jsonBody();",
+          "});"
+        ]
+      }
+    }
+  ]
+}

@@ -505,6 +505,57 @@ app.get('/api/classrooms/:id', authenticateToken, requireLecturer, async (req, r
     }
 });
 
+// GET classroom by classroom_code
+app.get('/api/classrooms/code/:classroomCode', authenticateToken, async (req, res) => {
+    const { classroomCode } = req.params;
+
+    try {
+        const classroom = await Classroom.findOne({
+            where: {
+                classroom_code: classroomCode.toUpperCase()
+            },
+            include: [{
+                model: Lecturer,
+                as: 'lecturer',
+                attributes: ['id', 'name', 'email', 'department']
+            }]
+        });
+
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found with the provided classroom code.' 
+            });
+        }
+
+        // Check if user has access to this classroom
+        // Lecturers can only access their own classrooms
+        // Students can access any classroom (for joining purposes)
+        if (req.user.type === 'lecturer' && classroom.created_by !== req.user.id) {
+            return res.status(403).json({ 
+                message: 'You do not have permission to access this classroom.' 
+            });
+        }
+
+        res.status(200).json({
+            classroom: {
+                id: classroom.id,
+                class_name: classroom.class_name,
+                class_details: classroom.class_details,
+                classroom_code: classroom.classroom_code,
+                created_by: classroom.created_by,
+                created_at: classroom.created_at,
+                updated_at: classroom.updated_at,
+                lecturer: classroom.lecturer
+            }
+        });
+    } catch (error) {
+        console.error('Get Classroom by Code Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while fetching the classroom.' 
+        });
+    }
+});
+
 // POST create a new classroom (protected route)
 app.post('/api/classrooms', authenticateToken, requireLecturer, async (req, res) => {
     const { class_name, class_details, classroom_code } = req.body;
