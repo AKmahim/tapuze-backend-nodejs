@@ -346,7 +346,7 @@
           "response": []
         },
         {
-          "name": "Get All Assignments",
+          "name": "Get All Assignments (Lecturer)",
           "request": {
             "method": "GET",
             "header": [
@@ -361,6 +361,32 @@
               "path": ["api", "classrooms", "{{classroom_id}}", "assignments"]
             },
             "description": "Get all assignments for a specific classroom (lecturer only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Assignments by Classroom Code (Student)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/classrooms/code/{{classroom_code}}/assignments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "classrooms", "code", "{{classroom_code}}", "assignments"],
+              "variable": [
+                {
+                  "key": "classroom_code",
+                  "value": "MATH101",
+                  "description": "The classroom code to get assignments for"
+                }
+              ]
+            },
+            "description": "Get all assignments for a classroom using classroom code (student only). Students can view assignments in any classroom using the classroom code."
           },
           "response": []
         },

@@ -747,6 +747,66 @@ app.get('/api/classrooms/:classroomId/assignments/:assignmentId', authenticateTo
     }
 });
 
+// GET all assignments for a specific classroom by classroom code (for students)
+app.get('/api/classrooms/code/:classroomCode/assignments', authenticateToken, requireStudent, async (req, res) => {
+    const { classroomCode } = req.params;
+
+    try {
+        // Find the classroom by classroom code
+        const classroom = await Classroom.findOne({
+            where: {
+                classroom_code: classroomCode.toUpperCase()
+            }
+        });
+
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found with the provided classroom code.' 
+            });
+        }
+
+        // Get all assignments for the classroom
+        const assignments = await Assignment.findAll({
+            where: {
+                classroom_id: classroom.id
+            },
+            include: [
+                {
+                    model: Lecturer,
+                    as: 'lecturer',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Classroom,
+                    as: 'classroom',
+                    attributes: ['id', 'class_name', 'classroom_code']
+                }
+            ],
+            order: [['created_at', 'DESC']]
+        });
+
+        res.status(200).json({
+            assignments: assignments.map(assignment => ({
+                id: assignment.id,
+                assignment_title: assignment.assignment_title,
+                assignment_details: assignment.assignment_details,
+                due_date: assignment.due_date,
+                created_by: assignment.created_by,
+                classroom_id: assignment.classroom_id,
+                created_at: assignment.created_at,
+                updated_at: assignment.updated_at,
+                lecturer: assignment.lecturer,
+                classroom: assignment.classroom
+            }))
+        });
+    } catch (error) {
+        console.error('Get Assignments by Classroom Code Error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while fetching assignments.' 
+        });
+    }
+});
+
 // POST join a classroom
 app.post('/api/classrooms/join', (req, res) => {
     const { secretCode, studentId } = req.body;
