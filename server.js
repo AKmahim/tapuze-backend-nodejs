@@ -8,7 +8,8 @@ const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const { gradeHomework } = require('./geminiService');
 const { convertPdfToImage } = require('./pdfConverter');
-const { Lecturer, Classroom, Assignment, Student } = require('./models');
+const { Lecturer, Classroom, Assignment, Student, AssignmentSubmission } = require('./models');
+const { initializeDatabase } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -916,54 +917,389 @@ app.post('/api/classrooms/:classroomId/assignments', authenticateToken, requireL
     }
 });
 
-// POST submit an assignment
-app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', (req, res) => {
+// POST submit an assignment (with file upload for Postman testing)
+app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions/upload', upload.single('homeworkPdf'), async (req, res) => {
+    const { classroomId, assignmentId } = req.params;
+    const { studentId } = req.body;
+
+    if (!req.file) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please upload a file with the key "homeworkPdf".' });
+    }
+
+    if (!studentId) {
+        return res.status(400).json({ message: 'studentId is required.' });
+    }
+
+    try {
+        // Convert PDF to base64 image
+        const imageBase64 = await convertPdfToImage(req.file.buffer);
+        
+        // Verify classroom exists
+        const classroom = await Classroom.findByPk(classroomId);
+        if (!classroom) {
+            return res.status(404).json({ message: 'Classroom not found.' });
+        }
+
+        // Verify assignment exists and belongs to the classroom
+        const assignment = await Assignment.findOne({
+            where: {
+                id: assignmentId,
+                classroom_id: classroomId
+            }
+        });
+        if (!assignment) {
+            return res.status(404).json({ message: 'Assignment not found in this classroom.' });
+        }
+
+        // Verify student exists
+        const student = await Student.findByPk(studentId);
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found.' });
+        }
+
+        // Check if student already has a submission for this assignment
+        const existingSubmission = await AssignmentSubmission.findOne({
+            where: {
+                student_id: studentId,
+                assignment_id: assignmentId
+            }
+        });
+
+        // If submission exists, update it; otherwise create new one
+        let submissionResult;
+        if (existingSubmission) {
+            // Update existing submission
+            await existingSubmission.update({
+                file_data: imageBase64,
+                file_name: req.file.originalname,
+                submitted_at: new Date(),
+                status: 'submitted'
+            });
+            submissionResult = existingSubmission;
+        } else {
+            // Create new submission
+            submissionResult = await AssignmentSubmission.create({
+                student_id: parseInt(studentId),
+                assignment_id: parseInt(assignmentId),
+                file_data: imageBase64,
+                file_name: req.file.originalname,
+                submitted_at: new Date(),
+                status: 'submitted'
+            });
+        }
+
+        // Fetch the submission with related data
+        const submissionWithDetails = await AssignmentSubmission.findByPk(submissionResult.id, {
+            include: [
+                {
+                    model: Student,
+                    as: 'student',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Assignment,
+                    as: 'assignment',
+                    attributes: ['id', 'assignment_title', 'due_date'],
+                    include: [{
+                        model: Classroom,
+                        as: 'classroom',
+                        attributes: ['id', 'class_name', 'classroom_code']
+                    }]
+                }
+            ]
+        });
+
+        res.status(201).json({
+            message: existingSubmission ? 'Submission updated successfully.' : 'Submission created successfully.',
+            submission: {
+                id: submissionWithDetails.id,
+                student_id: submissionWithDetails.student_id,
+                assignment_id: submissionWithDetails.assignment_id,
+                file_name: submissionWithDetails.file_name,
+                submitted_at: submissionWithDetails.submitted_at,
+                status: submissionWithDetails.status,
+                mark: submissionWithDetails.mark,
+                feedback: submissionWithDetails.feedback,
+                graded_at: submissionWithDetails.graded_at,
+                student: submissionWithDetails.student,
+                assignment: submissionWithDetails.assignment
+            }
+        });
+    } catch (error) {
+        console.error('Assignment Submission Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map(err => ({
+                field: err.path,
+                message: err.message
+            }));
+            return res.status(400).json({ 
+                message: 'Validation failed.',
+                errors: validationErrors
+            });
+        }
+        
+        res.status(500).json({ message: error.message || 'An error occurred during submission.' });
+    }
+});
+
+// POST submit an assignment (original JSON endpoint - now using MySQL)
+app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', async (req, res) => {
     const { classroomId, assignmentId } = req.params;
     const { studentId, fileData, fileName } = req.body;
 
-    const db = readDB();
-    const classroom = db.classrooms.find(c => c.id === classroomId);
-    if (!classroom) return res.status(404).json({ message: 'Classroom not found.' });
-    const assignment = classroom.assignments.find(a => a.id === assignmentId);
-    if (!assignment) return res.status(404).json({ message: 'Assignment not found.' });
+    // Validate required fields
+    if (!studentId || !fileData || !fileName) {
+        return res.status(400).json({ 
+            message: 'studentId, fileData, and fileName are required.' 
+        });
+    }
 
-    // Remove existing submission for the same student, if any
-    assignment.submissions = assignment.submissions.filter(s => s.studentId !== studentId);
+    try {
+        // Verify classroom exists
+        const classroom = await Classroom.findByPk(classroomId);
+        if (!classroom) {
+            return res.status(404).json({ message: 'Classroom not found.' });
+        }
 
-    const newSubmission = {
-        id: uuidv4(),
-        studentId,
-        fileData,
-        fileName,
-        submittedAt: new Date().toISOString(),
-        evaluation: null,
-        isGraded: false,
-    };
-    assignment.submissions.push(newSubmission);
-    writeDB(db);
-    res.status(201).json(newSubmission);
+        // Verify assignment exists and belongs to the classroom
+        const assignment = await Assignment.findOne({
+            where: {
+                id: assignmentId,
+                classroom_id: classroomId
+            }
+        });
+        if (!assignment) {
+            return res.status(404).json({ message: 'Assignment not found in this classroom.' });
+        }
+
+        // Verify student exists
+        const student = await Student.findByPk(studentId);
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found.' });
+        }
+
+        // Check if student already has a submission for this assignment
+        const existingSubmission = await AssignmentSubmission.findOne({
+            where: {
+                student_id: studentId,
+                assignment_id: assignmentId
+            }
+        });
+
+        // If submission exists, update it; otherwise create new one
+        let submissionResult;
+        if (existingSubmission) {
+            // Update existing submission
+            await existingSubmission.update({
+                file_data: fileData,
+                file_name: fileName,
+                submitted_at: new Date(),
+                status: 'submitted'
+            });
+            submissionResult = existingSubmission;
+        } else {
+            // Create new submission
+            submissionResult = await AssignmentSubmission.create({
+                student_id: parseInt(studentId),
+                assignment_id: parseInt(assignmentId),
+                file_data: fileData,
+                file_name: fileName,
+                submitted_at: new Date(),
+                status: 'submitted'
+            });
+        }
+
+        // Fetch the submission with related data
+        const submissionWithDetails = await AssignmentSubmission.findByPk(submissionResult.id, {
+            include: [
+                {
+                    model: Student,
+                    as: 'student',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Assignment,
+                    as: 'assignment',
+                    attributes: ['id', 'assignment_title', 'due_date'],
+                    include: [{
+                        model: Classroom,
+                        as: 'classroom',
+                        attributes: ['id', 'class_name', 'classroom_code']
+                    }]
+                }
+            ]
+        });
+
+        res.status(201).json({
+            message: existingSubmission ? 'Submission updated successfully.' : 'Submission created successfully.',
+            submission: {
+                id: submissionWithDetails.id,
+                student_id: submissionWithDetails.student_id,
+                assignment_id: submissionWithDetails.assignment_id,
+                file_name: submissionWithDetails.file_name,
+                submitted_at: submissionWithDetails.submitted_at,
+                status: submissionWithDetails.status,
+                mark: submissionWithDetails.mark,
+                feedback: submissionWithDetails.feedback,
+                graded_at: submissionWithDetails.graded_at,
+                student: submissionWithDetails.student,
+                assignment: submissionWithDetails.assignment
+            }
+        });
+    } catch (error) {
+        console.error('Assignment Submission Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map(err => ({
+                field: err.path,
+                message: err.message
+            }));
+            return res.status(400).json({ 
+                message: 'Validation failed.',
+                errors: validationErrors
+            });
+        }
+        
+        res.status(500).json({ message: error.message || 'An error occurred during submission.' });
+    }
 });
 
-// PUT update a submission (grade it)
-app.put('/api/classrooms/:classroomId/assignments/:assignmentId/submissions/:submissionId', (req, res) => {
+// PUT update a submission (grade it) - now using MySQL
+app.put('/api/classrooms/:classroomId/assignments/:assignmentId/submissions/:submissionId', authenticateToken, requireLecturer, async (req, res) => {
     const { classroomId, assignmentId, submissionId } = req.params;
-    const { evaluation } = req.body;
+    const { mark, feedback } = req.body;
 
-    const db = readDB();
-    const classroom = db.classrooms.find(c => c.id === classroomId);
-    if (!classroom) return res.status(404).json({ message: 'Classroom not found.' });
-    const assignment = classroom.assignments.find(a => a.id === assignmentId);
-    if (!assignment) return res.status(404).json({ message: 'Assignment not found.' });
-    const submission = assignment.submissions.find(s => s.id === submissionId);
-    if (!submission) return res.status(404).json({ message: 'Submission not found.' });
+    try {
+        // Verify classroom exists and belongs to the authenticated lecturer
+        const classroom = await Classroom.findOne({
+            where: {
+                id: classroomId,
+                created_by: req.user.id
+            }
+        });
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found or you do not have permission to grade submissions in this classroom.' 
+            });
+        }
 
-    submission.evaluation = evaluation;
-    submission.isGraded = true;
-    writeDB(db);
-    res.status(200).json(submission);
+        // Verify assignment exists and belongs to the classroom
+        const assignment = await Assignment.findOne({
+            where: {
+                id: assignmentId,
+                classroom_id: classroomId
+            }
+        });
+        if (!assignment) {
+            return res.status(404).json({ message: 'Assignment not found in this classroom.' });
+        }
+
+        // Find the submission
+        const submission = await AssignmentSubmission.findOne({
+            where: {
+                id: submissionId,
+                assignment_id: assignmentId
+            }
+        });
+        if (!submission) {
+            return res.status(404).json({ message: 'Submission not found.' });
+        }
+
+        // Update the submission with grade and feedback
+        await submission.update({
+            mark: mark || null,
+            feedback: feedback || null,
+            graded_by: req.user.id,
+            graded_at: new Date(),
+            status: 'graded'
+        });
+
+        // Fetch the updated submission with related data
+        const updatedSubmission = await AssignmentSubmission.findByPk(submission.id, {
+            include: [
+                {
+                    model: Student,
+                    as: 'student',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Assignment,
+                    as: 'assignment',
+                    attributes: ['id', 'assignment_title', 'due_date']
+                },
+                {
+                    model: Lecturer,
+                    as: 'grader',
+                    attributes: ['id', 'name', 'email']
+                }
+            ]
+        });
+
+        res.status(200).json({
+            message: 'Submission graded successfully.',
+            submission: {
+                id: updatedSubmission.id,
+                student_id: updatedSubmission.student_id,
+                assignment_id: updatedSubmission.assignment_id,
+                file_name: updatedSubmission.file_name,
+                submitted_at: updatedSubmission.submitted_at,
+                mark: updatedSubmission.mark,
+                feedback: updatedSubmission.feedback,
+                graded_by: updatedSubmission.graded_by,
+                graded_at: updatedSubmission.graded_at,
+                status: updatedSubmission.status,
+                student: updatedSubmission.student,
+                assignment: updatedSubmission.assignment,
+                grader: updatedSubmission.grader
+            }
+        });
+    } catch (error) {
+        console.error('Submission Grading Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'SequelizeValidationError') {
+            const validationErrors = error.errors.map(err => ({
+                field: err.path,
+                message: err.message
+            }));
+            return res.status(400).json({ 
+                message: 'Validation failed.',
+                errors: validationErrors
+            });
+        }
+        
+        res.status(500).json({ message: error.message || 'An error occurred while grading the submission.' });
+    }
 });
 
+// Initialize database and start server
+async function startServer() {
+    try {
+        // Initialize database connection
+        const dbInitialized = await initializeDatabase();
+        
+        if (!dbInitialized) {
+            console.error('❌ Failed to initialize database. Server will not start.');
+            process.exit(1);
+        }
+        
+        console.log('✅ Database connection established successfully.');
+        
+        // Start the server
+        app.listen(PORT, () => {
+            console.log(`🚀 Server is running on http://localhost:${PORT}`);
+            console.log('📊 Database: MySQL (Sequelize)');
+            console.log('🗄️  Environment:', process.env.NODE_ENV || 'development');
+        });
+        
+    } catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+}
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+// Start the server
+startServer();
