@@ -11,6 +11,10 @@ const AssignmentSubmission = sequelize.define('AssignmentSubmission', {
     type: DataTypes.STRING, // Store file path or URL
     allowNull: true
   },
+  file_name: {
+    type: DataTypes.STRING, // Store original file name
+    allowNull: true
+  },
   file_data: {
     type: DataTypes.TEXT('long'), // For storing base64 data if needed
     allowNull: true

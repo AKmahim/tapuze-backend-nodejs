@@ -50,6 +50,11 @@
       "key": "assignment_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "submission_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -415,26 +420,35 @@
     {
       "name": "Assignment Submissions",
       "item": [
+        
         {
-          "name": "Submit Assignment",
+          "name": "Submit Assignment (PDF Upload)",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"studentId\": \"student123\",\n  \"fileData\": \"base64_encoded_file_data_here\",\n  \"fileName\": \"homework1.pdf\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "pdfFile",
+                  "type": "file",
+                  "src": [],
+                  "description": "PDF file to upload (max 10MB)"
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{student_id}}",
+                  "type": "text",
+                  "description": "ID of the student submitting the assignment"
+                }
+              ]
             },
             "url": {
               "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments/{{assignment_id}}/submissions",
               "host": ["{{base_url}}"],
               "path": ["api", "classrooms", "{{classroom_id}}", "assignments", "{{assignment_id}}", "submissions"]
             },
-            "description": "Submit an assignment (legacy endpoint using JSON storage)"
+            "description": "Submit an assignment by uploading a PDF file directly. The file will be stored in public/submissions directory and accessible via URL."
           },
           "response": []
         },
@@ -446,11 +460,15 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"evaluation\": {\n    \"score\": 85,\n    \"feedback\": \"Good work! Make sure to show more detailed steps in problem 5.\",\n    \"rubric\": {\n      \"accuracy\": 8,\n      \"presentation\": 9,\n      \"completeness\": 8\n    }\n  }\n}"
+              "raw": "{\n  \"mark\": 85,\n  \"feedback\": \"Good work! Make sure to show more detailed steps in problem 5.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/classrooms/{{classroom_id}}/assignments/{{assignment_id}}/submissions/{{submission_id}}",
@@ -459,16 +477,17 @@
               "variable": [
                 {
                   "key": "submission_id",
-                  "value": "submission_uuid_here"
+                  "value": "",
+                  "description": "ID of the submission to grade"
                 }
               ]
             },
-            "description": "Grade a submission (legacy endpoint using JSON storage)"
+            "description": "Grade a submission (lecturer only)"
           },
           "response": []
         }
       ],
-      "description": "Assignment submission endpoints (legacy)"
+      "description": "Assignment submission endpoints supporting both JSON and file upload methods"
     },
     {
       "name": "AI Evaluation & Testing",
@@ -604,6 +623,12 @@
           "    if (responseJson.assignment && responseJson.assignment.id) {",
           "        pm.collectionVariables.set('assignment_id', responseJson.assignment.id);",
           "        console.log('Assignment ID set: ' + responseJson.assignment.id);",
+          "    }",
+          "    ",
+          "    // Set submission ID",
+          "    if (responseJson.submission && responseJson.submission.id) {",
+          "        pm.collectionVariables.set('submission_id', responseJson.submission.id);",
+          "        console.log('Submission ID set: ' + responseJson.submission.id);",
           "    }",
           "}",
           "",

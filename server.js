@@ -19,9 +19,44 @@ const DB_PATH = path.join(__dirname, 'db.json');
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Increase limit for base64 images
 
+// Serve static files from public directory
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
 // Multer setup for file uploads in memory
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
+// Multer setup for PDF file uploads to disk
+const pdfStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadsDir = path.join(__dirname, 'public', 'submissions');
+        // Ensure directory exists
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+        // Generate unique filename with timestamp and UUID
+        const uniqueName = `${Date.now()}-${uuidv4()}.pdf`;
+        cb(null, uniqueName);
+    }
+});
+
+const uploadPdf = multer({
+    storage: pdfStorage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept only PDF files
+        if (file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only PDF files are allowed!'), false);
+        }
+    }
+});
 
 // Helper functions for DB operations
 const readDB = () => {
@@ -917,143 +952,29 @@ app.post('/api/classrooms/:classroomId/assignments', authenticateToken, requireL
     }
 });
 
-// POST submit an assignment (with file upload for Postman testing)
-app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions/upload', upload.single('homeworkPdf'), async (req, res) => {
-    const { classroomId, assignmentId } = req.params;
-    const { studentId } = req.body;
 
-    if (!req.file) {
-        return res.status(400).json({ message: 'No PDF file uploaded. Please upload a file with the key "homeworkPdf".' });
-    }
 
-    if (!studentId) {
-        return res.status(400).json({ message: 'studentId is required.' });
-    }
-
-    try {
-        // Convert PDF to base64 image
-        const imageBase64 = await convertPdfToImage(req.file.buffer);
-        
-        // Verify classroom exists
-        const classroom = await Classroom.findByPk(classroomId);
-        if (!classroom) {
-            return res.status(404).json({ message: 'Classroom not found.' });
-        }
-
-        // Verify assignment exists and belongs to the classroom
-        const assignment = await Assignment.findOne({
-            where: {
-                id: assignmentId,
-                classroom_id: classroomId
-            }
-        });
-        if (!assignment) {
-            return res.status(404).json({ message: 'Assignment not found in this classroom.' });
-        }
-
-        // Verify student exists
-        const student = await Student.findByPk(studentId);
-        if (!student) {
-            return res.status(404).json({ message: 'Student not found.' });
-        }
-
-        // Check if student already has a submission for this assignment
-        const existingSubmission = await AssignmentSubmission.findOne({
-            where: {
-                student_id: studentId,
-                assignment_id: assignmentId
-            }
-        });
-
-        // If submission exists, update it; otherwise create new one
-        let submissionResult;
-        if (existingSubmission) {
-            // Update existing submission
-            await existingSubmission.update({
-                file_data: imageBase64,
-                file_name: req.file.originalname,
-                submitted_at: new Date(),
-                status: 'submitted'
-            });
-            submissionResult = existingSubmission;
-        } else {
-            // Create new submission
-            submissionResult = await AssignmentSubmission.create({
-                student_id: parseInt(studentId),
-                assignment_id: parseInt(assignmentId),
-                file_data: imageBase64,
-                file_name: req.file.originalname,
-                submitted_at: new Date(),
-                status: 'submitted'
-            });
-        }
-
-        // Fetch the submission with related data
-        const submissionWithDetails = await AssignmentSubmission.findByPk(submissionResult.id, {
-            include: [
-                {
-                    model: Student,
-                    as: 'student',
-                    attributes: ['id', 'name', 'email']
-                },
-                {
-                    model: Assignment,
-                    as: 'assignment',
-                    attributes: ['id', 'assignment_title', 'due_date'],
-                    include: [{
-                        model: Classroom,
-                        as: 'classroom',
-                        attributes: ['id', 'class_name', 'classroom_code']
-                    }]
-                }
-            ]
-        });
-
-        res.status(201).json({
-            message: existingSubmission ? 'Submission updated successfully.' : 'Submission created successfully.',
-            submission: {
-                id: submissionWithDetails.id,
-                student_id: submissionWithDetails.student_id,
-                assignment_id: submissionWithDetails.assignment_id,
-                file_name: submissionWithDetails.file_name,
-                submitted_at: submissionWithDetails.submitted_at,
-                status: submissionWithDetails.status,
-                mark: submissionWithDetails.mark,
-                feedback: submissionWithDetails.feedback,
-                graded_at: submissionWithDetails.graded_at,
-                student: submissionWithDetails.student,
-                assignment: submissionWithDetails.assignment
-            }
-        });
-    } catch (error) {
-        console.error('Assignment Submission Error:', error);
-        
-        // Handle validation errors
-        if (error.name === 'SequelizeValidationError') {
-            const validationErrors = error.errors.map(err => ({
-                field: err.path,
-                message: err.message
-            }));
-            return res.status(400).json({ 
-                message: 'Validation failed.',
-                errors: validationErrors
-            });
-        }
-        
-        res.status(500).json({ message: error.message || 'An error occurred during submission.' });
-    }
-});
-
-// POST submit an assignment (original JSON endpoint - now using MySQL)
-app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', async (req, res) => {
+// POST submit an assignment (supports both JSON and file upload)
+app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', uploadPdf.single('pdfFile'), async (req, res) => {
     const { classroomId, assignmentId } = req.params;
     const { studentId, fileData, fileName } = req.body;
 
-    // Validate required fields
-    if (!studentId || !fileData || !fileName) {
-        return res.status(400).json({ 
-            message: 'studentId, fileData, and fileName are required.' 
-        });
+    // Check if this is a file upload or JSON submission
+    const isFileUpload = req.file && req.file.filename;
+    
+    // Validate required fields based on submission type
+    if (isFileUpload) {
+        if (!studentId) {
+            return res.status(400).json({ 
+                message: 'studentId is required for file uploads.' 
+            });
+        }
+    } else {
+        if (!studentId || !fileData || !fileName) {
+            return res.status(400).json({ 
+                message: 'studentId, fileData, and fileName are required for JSON submissions.' 
+            });
+        }
     }
 
     try {
@@ -1088,26 +1009,35 @@ app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', a
             }
         });
 
+        // Prepare submission data
+        let submissionData = {
+            submitted_at: new Date(),
+            status: 'submitted'
+        };
+
+        if (isFileUpload) {
+            // File upload submission
+            submissionData.assignment_file = `/public/submissions/${req.file.filename}`;
+            submissionData.file_name = req.file.originalname;
+        }
+        // } else {
+        //     // JSON submission
+        //     submissionData.file_data = fileData;
+        //     submissionData.file_name = fileName;
+        // }
+
         // If submission exists, update it; otherwise create new one
         let submissionResult;
         if (existingSubmission) {
             // Update existing submission
-            await existingSubmission.update({
-                file_data: fileData,
-                file_name: fileName,
-                submitted_at: new Date(),
-                status: 'submitted'
-            });
+            await existingSubmission.update(submissionData);
             submissionResult = existingSubmission;
         } else {
             // Create new submission
             submissionResult = await AssignmentSubmission.create({
                 student_id: parseInt(studentId),
                 assignment_id: parseInt(assignmentId),
-                file_data: fileData,
-                file_name: fileName,
-                submitted_at: new Date(),
-                status: 'submitted'
+                ...submissionData
             });
         }
 
@@ -1139,6 +1069,7 @@ app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', a
                 student_id: submissionWithDetails.student_id,
                 assignment_id: submissionWithDetails.assignment_id,
                 file_name: submissionWithDetails.file_name,
+                file_path: submissionWithDetails.assignment_file,
                 submitted_at: submissionWithDetails.submitted_at,
                 status: submissionWithDetails.status,
                 mark: submissionWithDetails.mark,
@@ -1150,6 +1081,18 @@ app.post('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', a
         });
     } catch (error) {
         console.error('Assignment Submission Error:', error);
+        
+        // Handle multer errors
+        if (error instanceof multer.MulterError) {
+            if (error.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ 
+                    message: 'File size too large. Maximum size is 10MB.' 
+                });
+            }
+            return res.status(400).json({ 
+                message: error.message 
+            });
+        }
         
         // Handle validation errors
         if (error.name === 'SequelizeValidationError') {
@@ -1274,6 +1217,103 @@ app.put('/api/classrooms/:classroomId/assignments/:assignmentId/submissions/:sub
         res.status(500).json({ message: error.message || 'An error occurred while grading the submission.' });
     }
 });
+
+// GET all submissions for an assignment (for lecturer)
+app.get('/api/classrooms/:classroomId/assignments/:assignmentId/submissions', authenticateToken, requireLecturer, async (req, res) => {
+    const { classroomId, assignmentId } = req.params;
+
+    try {
+        // Verify classroom exists and belongs to the authenticated lecturer
+        const classroom = await Classroom.findOne({
+            where: {
+                id: classroomId,
+                created_by: req.user.id
+            }
+        });
+        if (!classroom) {
+            return res.status(404).json({ 
+                message: 'Classroom not found or you do not have permission to view submissions in this classroom.' 
+            });
+        }
+
+        // Verify assignment exists and belongs to the classroom
+        const assignment = await Assignment.findOne({
+            where: {
+                id: assignmentId,
+                classroom_id: classroomId
+            }
+        });
+        if (!assignment) {
+            return res.status(404).json({ message: 'Assignment not found in this classroom.' });
+        }
+
+        // Get all submissions for the assignment
+        const submissions = await AssignmentSubmission.findAll({
+            where: {
+                assignment_id: assignmentId
+            },
+            include: [
+                {
+                    model: Student,
+                    as: 'student',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: Assignment,
+                    as: 'assignment',
+                    attributes: ['id', 'assignment_title', 'due_date'],
+                    include: [{
+                        model: Classroom,
+                        as: 'classroom',
+                        attributes: ['id', 'class_name', 'classroom_code']
+                    }]
+                },
+                {
+                    model: Lecturer,
+                    as: 'grader',
+                    attributes: ['id', 'name', 'email']
+                }
+            ],
+            order: [['submitted_at', 'DESC']]
+        });
+
+        res.status(200).json({
+            message: 'Submissions retrieved successfully.',
+            assignment: {
+                id: assignment.id,
+                assignment_title: assignment.assignment_title,
+                due_date: assignment.due_date,
+                classroom_id: assignment.classroom_id
+            },
+            submissions: submissions.map(submission => ({
+                id: submission.id,
+                student_id: submission.student_id,
+                assignment_id: submission.assignment_id,
+                file_name: submission.file_name,
+                file_path: submission.assignment_file,
+                submitted_at: submission.submitted_at,
+                status: submission.status,
+                mark: submission.mark,
+                feedback: submission.feedback,
+                graded_by: submission.graded_by,
+                graded_at: submission.graded_at,
+                created_at: submission.created_at,
+                updated_at: submission.updated_at,
+                student: submission.student,
+                assignment: submission.assignment,
+                grader: submission.grader
+            })),
+            total_submissions: submissions.length
+        });
+    } catch (error) {
+        console.error('Get Assignment Submissions Error:', error);
+        
+        res.status(500).json({ 
+            message: 'An error occurred while fetching submissions for this assignment.' 
+        });
+    }
+});
+
 
 // Initialize database and start server
 async function startServer() {
